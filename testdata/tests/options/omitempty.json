@@ -49,4 +49,25 @@
     "b": "data"
   },
   "patch": []
+},{
+  "name": "OmitEmpty in embedded structs",
+  "before": {
+    "a": {
+      "b": "data"
+    }
+  },
+  "after" : {
+    "a": {
+      "b": "other data"
+    },
+    "c": {
+      "d": "",
+      "f": null,
+      "g": "Test"
+    },
+    "h" : {
+      "i": null
+    }
+  },
+  "patch": [{ "op": "replace", "path": "/a/b", "value": "other data" }, { "op": "add", "path": "/c", "value": {"g":  "Test"} }]
 }]

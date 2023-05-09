@@ -82,9 +82,6 @@ func (d *Differ) diff(ptr pointer, src, tgt interface{}) {
 	if _, ok := d.opts.ignores[ptr.copy()]; ok {
 		return
 	}
-	if d.opts.omitEmpty && isEmpty(src) && isEmpty(tgt) {
-		return
-	}
 	if !areComparable(src, tgt) {
 		if ptr.isRoot() {
 			// If incomparable values are located at the root
@@ -201,10 +198,14 @@ func (d *Differ) compareObjects(ptr pointer, src, tgt map[string]interface{}) {
 	cmpSet := make(map[string]uint8, max(len(src), len(tgt)))
 
 	for k := range src {
-		cmpSet[k] |= 1 << 0
+		if !(d.opts.omitEmpty && isEmpty(src[k])) {
+			cmpSet[k] |= 1 << 0
+		}
 	}
 	for k := range tgt {
-		cmpSet[k] |= 1 << 1
+		if !(d.opts.omitEmpty && isEmpty(tgt[k])) {
+			cmpSet[k] |= 1 << 1
+		}
 	}
 	keys := make([]string, 0, len(cmpSet))
 
@@ -223,14 +224,14 @@ func (d *Differ) compareObjects(ptr pointer, src, tgt map[string]interface{}) {
 
 		switch {
 		case inOld && inNew:
-			d.diff(ptr, src[k], tgt[k])
+			d.diff(ptr, d.omitEmptyInterface(src[k]), d.omitEmptyInterface(tgt[k]))
 		case inOld && !inNew:
 			if _, ok := d.opts.ignores[ptr.string()]; !ok {
-				d.remove(ptr.copy(), src[k])
+				d.remove(ptr.copy(), d.omitEmptyInterface(src[k]))
 			}
 		case !inOld && inNew:
 			if _, ok := d.opts.ignores[ptr.string()]; !ok {
-				d.add(ptr.copy(), tgt[k])
+				d.add(ptr.copy(), d.omitEmptyInterface(tgt[k]))
 			}
 		}
 		ptr = ptr.rewind()
@@ -309,9 +310,6 @@ func (d *Differ) unorderedDeepEqualSlice(src, tgt []interface{}) bool {
 }
 
 func (d *Differ) add(ptr string, v interface{}) {
-	if d.opts.omitEmpty && isEmpty(v) {
-		return
-	}
 	if !d.opts.factorize {
 		d.patch = d.patch.append(OperationAdd, emptyPtr, ptr, nil, v)
 		return
@@ -339,9 +337,6 @@ func (d *Differ) add(ptr string, v interface{}) {
 }
 
 func (d *Differ) replace(ptr string, src, tgt interface{}) {
-	if d.opts.omitEmpty && isEmpty(src) && isEmpty(tgt) {
-		return
-	}
 	if d.opts.invertible {
 		d.patch = d.patch.append(OperationTest, emptyPtr, ptr, nil, src)
 	}
@@ -349,9 +344,6 @@ func (d *Differ) replace(ptr string, src, tgt interface{}) {
 }
 
 func (d *Differ) remove(ptr string, v interface{}) {
-	if d.opts.omitEmpty && isEmpty(v) {
-		return
-	}
 	if d.opts.invertible {
 		d.patch = d.patch.append(OperationTest, emptyPtr, ptr, nil, v)
 	}
@@ -428,9 +420,75 @@ func isEmpty(v interface{}) bool {
 		return true
 	}
 
-	if s, isString := v.(string); isString {
-		return s == ""
+	switch value := v.(type) {
+	case []interface{}:
+		for i := range value {
+			if !isEmpty(value[i]) {
+				return false
+			}
+		}
+
+		return true
+	case map[string]interface{}:
+		for i := range value {
+			if !isEmpty(value[i]) {
+				return false
+			}
+		}
+
+		return true
+	case string:
+		return value == ""
 	}
 
 	return false
+}
+
+func (d *Differ) omitEmptyInterface(value interface{}) interface{} {
+	if d.opts.omitEmpty {
+		return omitEmptyInterface(value)
+	}
+
+	return value
+}
+
+func omitEmptyInterface(value interface{}) interface{} {
+	if value == nil {
+		return nil
+	}
+
+	switch v := value.(type) {
+	case []interface{}:
+		var result []interface{}
+
+		for _, vv := range v {
+			cleanupDiffValue := omitEmptyInterface(vv)
+			if cleanupDiffValue != nil {
+				result = append(result, cleanupDiffValue)
+			}
+		}
+
+		return result
+	case map[string]interface{}:
+		var result map[string]interface{}
+
+		for k, vv := range v {
+			cleanupDiffValue := omitEmptyInterface(vv)
+			if cleanupDiffValue != nil {
+				if result == nil {
+					result = make(map[string]interface{})
+				}
+
+				result[k] = cleanupDiffValue
+			}
+		}
+
+		return result
+	case string:
+		if v == "" {
+			return nil
+		}
+	}
+
+	return value
 }
