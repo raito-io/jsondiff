@@ -3,7 +3,7 @@ builds:
   - skip: true
 release:
   github:
-    owner: wI2L
+    owner: raito-io
     name: jsondiff
   draft: true
   prerelease: auto
