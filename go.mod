@@ -1,4 +1,4 @@
-module github.com/wI2L/jsondiff
+module github.com/raito-io/jsondiff
 
 go 1.18
 
